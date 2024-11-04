@@ -11,9 +11,10 @@ import org.bukkit.Color;
 public final class Simon extends JavaPlugin {
 
    private final int BORDER_DIAMETER = 10;
-   private final int PARTICLES_PER_CIRCLE = 200;
+   private final int PARTICLES_PER_CIRCLE = 100;
    private final double DAMAGE_AMOUNT = 2.0;
    private final double RADIUS = BORDER_DIAMETER / 2;
+   private final int WALL_SECTIONS = 16;
 
    @Override
    public void onEnable() {
@@ -43,21 +44,22 @@ public final class Simon extends JavaPlugin {
 
    private void drawParticleBorder(Location center, double radius) {
        World world = center.getWorld();
+       int maxHeight = world.getMaxHeight();
+       int heightPerSection = maxHeight / WALL_SECTIONS;
        
        for(int i = 0; i < PARTICLES_PER_CIRCLE; i++) {
            double angle = 2 * Math.PI * i / PARTICLES_PER_CIRCLE;
            double x = center.getX() + (radius * Math.cos(angle));
            double z = center.getZ() + (radius * Math.sin(angle));
            
-           Location particleLoc = new Location(world, x, center.getY(), z);
-           
-           for(double y = 0; y < 256; y += 1) {
-               particleLoc.setY(y);
+           for(int h = 0; h < WALL_SECTIONS; h++) {
+               Location particleLoc = new Location(world, x, h * heightPerSection, z);
+               
                world.spawnParticle(
                    Particle.DUST_COLOR_TRANSITION, 
                    particleLoc, 
-                   1, 
-                   0, 0, 0,
+                   heightPerSection,
+                   0, heightPerSection, 0,
                    new Particle.DustTransition(Color.RED, Color.RED, 1.0f)
                );
            }
@@ -67,7 +69,7 @@ public final class Simon extends JavaPlugin {
    private void checkPlayerLocation(Player player, Location center) {
        Location flatPlayerLoc = new Location(player.getWorld(), 
            player.getLocation().getX(), 
-           center.getY(),
+           center.getY(),  
            player.getLocation().getZ());
            
        Location flatCenter = new Location(player.getWorld(), 
@@ -77,7 +79,7 @@ public final class Simon extends JavaPlugin {
        
        double distance = flatPlayerLoc.distance(flatCenter);
        
-       if (distance > RADIUS + 0.5) {  
+       if (distance > RADIUS + 0.5) {
            player.damage(DAMAGE_AMOUNT);
        }
    }
