@@ -1,0 +1,4 @@
+name: Simon
+version: '1.0-SNAPSHOT'
+main: com.wonkyfingers.simon.Simon
+api-version: '1.21'
