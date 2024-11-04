@@ -5,6 +5,7 @@ import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.Color;
 
 public final class Simon extends JavaPlugin {
 
@@ -15,7 +16,7 @@ public final class Simon extends JavaPlugin {
     public void onEnable() {
         World world = getServer().getWorlds().get(0);
         Location center = world.getSpawnLocation();
-        
+
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -38,12 +39,19 @@ public final class Simon extends JavaPlugin {
             
             for(double y = 0; y < 256; y += 2) {
                 particleLoc.setY(y);
-                world.spawnParticle(Particle.REDSTONE, particleLoc, 1, new Particle.DustOptions(org.bukkit.Color.RED, 1));
+                world.spawnParticle(
+                    Particle.DUST_COLOR_TRANSITION, 
+                    particleLoc, 
+                    1, 
+                    0, 0, 0,
+                    new Particle.DustTransition(Color.RED, Color.RED, 1.0f)
+                );
             }
         }
     }
 
     @Override
     public void onDisable() {
+
     }
 }
