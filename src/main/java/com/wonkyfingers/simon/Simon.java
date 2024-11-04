@@ -3,6 +3,7 @@ package com.wonkyfingers.simon;
 import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.World;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.Color;
@@ -10,21 +11,32 @@ import org.bukkit.Color;
 public final class Simon extends JavaPlugin {
 
     private final int BORDER_DIAMETER = 10;
-    private final int PARTICLES_PER_CIRCLE = 50;
+    private final int PARTICLES_PER_CIRCLE = 200;
+    private final double DAMAGE_AMOUNT = 2.0;
+    private final double RADIUS = BORDER_DIAMETER / 2;
 
     @Override
     public void onEnable() {
         World world = getServer().getWorlds().get(0);
         Location center = world.getSpawnLocation();
-
+        
         new BukkitRunnable() {
             @Override
             public void run() {
-                drawParticleBorder(center, BORDER_DIAMETER / 2);
+                drawParticleBorder(center, RADIUS);
             }
-        }.runTaskTimer(this, 0L, 5L);
+        }.runTaskTimer(this, 0L, 2L);
         
-        getLogger().info("Particle border has been set!");
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                for (Player player : world.getPlayers()) {
+                    checkPlayerLocation(player, center);
+                }
+            }
+        }.runTaskTimer(this, 0L, 10L);
+        
+        getLogger().info("Border with damage has been set!");
     }
 
     private void drawParticleBorder(Location center, double radius) {
@@ -37,7 +49,8 @@ public final class Simon extends JavaPlugin {
             
             Location particleLoc = new Location(world, x, center.getY(), z);
             
-            for(double y = 0; y < 256; y += 2) {
+            
+            for(double y = 0; y < 256; y += 1) {
                 particleLoc.setY(y);
                 world.spawnParticle(
                     Particle.DUST_COLOR_TRANSITION, 
@@ -50,8 +63,15 @@ public final class Simon extends JavaPlugin {
         }
     }
 
+    private void checkPlayerLocation(Player player, Location center) {
+        double distance = player.getLocation().distance(center);
+        
+        if (distance > RADIUS) {
+            player.damage(DAMAGE_AMOUNT);
+        }
+    }
+
     @Override
     public void onDisable() {
-
     }
 }
