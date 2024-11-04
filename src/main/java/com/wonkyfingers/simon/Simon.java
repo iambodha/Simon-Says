@@ -65,13 +65,19 @@ public final class Simon extends JavaPlugin {
    }
 
    private void checkPlayerLocation(Player player, Location center) {
-       Location playerLoc = player.getLocation();
+       Location flatPlayerLoc = new Location(player.getWorld(), 
+           player.getLocation().getX(), 
+           center.getY(),
+           player.getLocation().getZ());
+           
+       Location flatCenter = new Location(player.getWorld(), 
+           center.getX(), 
+           center.getY(), 
+           center.getZ());
        
-       double dx = playerLoc.getX() - center.getX();
-       double dz = playerLoc.getZ() - center.getZ();
-       double distance = Math.sqrt(dx * dx + dz * dz);
+       double distance = flatPlayerLoc.distance(flatCenter);
        
-       if (distance > RADIUS + 1) {  
+       if (distance > RADIUS + 0.5) {  
            player.damage(DAMAGE_AMOUNT);
        }
    }
