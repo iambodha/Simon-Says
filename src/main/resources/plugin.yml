@@ -2,3 +2,11 @@ name: Simon
 version: '1.0-SNAPSHOT'
 main: com.wonkyfingers.simon.Simon
 api-version: '1.21'
+
+commands:
+  startgame:
+    description: Starts a new game (OP only)
+    usage: /startgame [minutes]
+  stopgame:
+    description: Stops the current game (OP only)
+    usage: /stopgame
