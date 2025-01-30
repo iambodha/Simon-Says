@@ -9,6 +9,9 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.stream.Stream;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -23,6 +26,23 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.Material;
+import org.bukkit.World;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.Ageable;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.Bee;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Monster;
+import org.bukkit.entity.Sheep;
+import org.bukkit.entity.Strider;
+import org.bukkit.entity.TNTPrimed;
+import org.bukkit.entity.Tameable;
+import org.bukkit.entity.Villager;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.Statistic;
+import org.bukkit.entity.EntityType;
 
 public class TaskManager {
     private final Simon plugin;
@@ -170,8 +190,501 @@ public class TaskManager {
                     return sorted;
                 },
                 "Sort your hotbar items alphabetically"));
-    }
 
+        // Combat & PVE Tasks
+        availableTasks.add(new SimonTask("Perfect Block",
+                player -> player.isBlocking() && player.getNearbyEntities(3, 3, 3).stream()
+                        .anyMatch(e -> e instanceof Monster),
+                "Block an attack from a monster with perfect timing"));
+
+        availableTasks.add(new SimonTask("Arrow Catch",
+                player -> {
+                    return player.getStatistic(Statistic.PICKUP, Material.ARROW) > 0;
+                },
+                "Catch an arrow mid-flight"));
+        // Parkour Tasks
+        availableTasks.add(new SimonTask("Wall Run",
+                player -> {
+                    Location loc = player.getLocation();
+                    return !player.isOnGround() && loc.getBlock().getRelative(BlockFace.NORTH).getType().isSolid();
+                },
+                "Run along a wall without touching the ground"));
+
+        availableTasks.add(new SimonTask("Precise Landing",
+                player -> {
+                    Location loc = player.getLocation();
+                    return loc.getBlock().getType() == Material.GOLD_BLOCK &&
+                            !player.getLocation().add(0, -1, 0).getBlock().getType().isSolid();
+                },
+                "Land exactly on a gold block"));
+
+        // Environmental Interaction
+        availableTasks.add(new SimonTask("Water Walk",
+                player -> {
+                    Location loc = player.getLocation();
+                    return loc.add(0, -1, 0).getBlock().getType() == Material.WATER &&
+                            player.getVelocity().getY() >= 0;
+                },
+                "Walk on water using lily pads or frost walker"));
+
+        availableTasks.add(new SimonTask("Torch Placer",
+                player -> {
+                    Location loc = player.getLocation();
+                    return loc.getWorld().getBlockAt(loc).getLightLevel() > 10;
+                },
+                "Place torches to achieve maximum brightness"));
+
+        // Building Tasks
+        availableTasks.add(new SimonTask("Quick Builder",
+                player -> {
+                    Location loc = player.getLocation();
+                    int blockCount = 0;
+                    for (int x = -1; x <= 1; x++) {
+                        for (int z = -1; z <= 1; z++) {
+                            if (loc.clone().add(x, -1, z).getBlock().getType().isSolid()) {
+                                blockCount++;
+                            }
+                        }
+                    }
+                    return blockCount >= 9;
+                },
+                "Build a 3x3 platform in under 5 seconds"));
+
+        // Inventory Management
+        availableTasks.add(new SimonTask("Color Coordinator",
+                player -> {
+                    ItemStack[] armor = player.getInventory().getArmorContents();
+                    if (armor[0] == null || armor[1] == null || armor[2] == null || armor[3] == null) return false;
+                    Material color = armor[0].getType();
+                    for (ItemStack item : armor) {
+                        if (item.getType().name().contains(color.name())) return false;
+                    }
+                    return true;
+                },
+                "Wear a complete set of matching colored armor"));
+
+        // Advanced Movement
+        availableTasks.add(new SimonTask("360 No Scope",
+                player -> {
+                    float yaw = player.getLocation().getYaw();
+                    return !player.isOnGround() && Math.abs(yaw - player.getLocation().getYaw()) >= 360;
+                },
+                "Perform a 360-degree spin while in the air"));
+
+        availableTasks.add(new SimonTask("Dolphin Dive",
+                player -> {
+                    Location loc = player.getLocation();
+                    return player.isSwimming() &&
+                            loc.getPitch() < -30 &&
+                            loc.getBlock().getType() == Material.WATER;
+                },
+                "Dive into water like a dolphin"));
+
+        // Tool Usage
+        availableTasks.add(new SimonTask("Tool Master",
+                player -> {
+                    ItemStack item = player.getInventory().getItemInMainHand();
+                    return item != null &&
+                            item.getType().name().endsWith("_PICKAXE") &&
+                            item.getEnchantments().size() >= 3;
+                },
+                "Use a pickaxe with at least 3 enchantments"));
+
+        // Weather Related
+        availableTasks.add(new SimonTask("Lightning Rod",
+                player -> {
+                    Location loc = player.getLocation();
+                    return loc.getWorld().hasStorm() &&
+                            loc.getBlock().getLightFromSky() == 15 &&
+                            player.getInventory().getHelmet() != null &&
+                            player.getInventory().getHelmet().getType() == Material.LIGHTNING_ROD;
+                },
+                "Stand in the rain with a lightning rod on your head"));
+
+        // Crafting Tasks
+        availableTasks.add(new SimonTask("Speed Crafter",
+                player -> {
+                    // This would need additional implementation to track crafting speed
+                    return player.getStatistic(Statistic.CRAFT_ITEM) > 0;
+                },
+                "Craft 3 different items within 10 seconds"));
+
+        // Pet Interaction
+        availableTasks.add(new SimonTask("Pet Parade",
+                player -> {
+                    int tamedAnimals = (int) player.getNearbyEntities(5, 5, 5).stream()
+                            .filter(e -> e instanceof Tameable && ((Tameable) e).isTamed() &&
+                                    ((Tameable) e).getOwner().equals(player))
+                            .count();
+                    return tamedAnimals >= 3;
+                },
+                "Have 3 tamed animals following you simultaneously"));
+
+        // Redstone Engineering
+        availableTasks.add(new SimonTask("Circuit Builder",
+                player -> {
+                    Location loc = player.getLocation();
+                    int redstoneCount = 0;
+                    for (int x = -2; x <= 2; x++) {
+                        for (int z = -2; z <= 2; z++) {
+                            if (loc.clone().add(x, 0, z).getBlock().getType() == Material.REDSTONE_WIRE) {
+                                redstoneCount++;
+                            }
+                        }
+                    }
+                    return redstoneCount >= 5;
+                },
+                "Create a working redstone circuit"));
+
+        // Social Tasks
+        availableTasks.add(new SimonTask("Trade Master",
+                player -> {
+                    return player.getNearbyEntities(5, 5, 5).stream()
+                            .anyMatch(e -> e instanceof Villager &&
+                                    ((Villager) e).getProfession() != Villager.Profession.NONE);
+                },
+                "Successfully trade with a villager"));
+
+        // Farming Tasks
+        availableTasks.add(new SimonTask("Crop Harvester",
+        player -> {
+            Location loc = player.getLocation();
+            int cropCount = 0;
+            for (int x = -2; x <= 2; x++) {
+                for (int z = -2; z <= 2; z++) {
+                    Block block = loc.clone().add(x, 0, z).getBlock();
+                    if (block.getType() == Material.WHEAT && 
+                        block.getBlockData() instanceof Ageable) {
+                        Ageable crop = (Ageable) block.getBlockData();
+                        if (crop.getAge() == crop.getMaximumAge()) {
+                            cropCount++;
+                        }
+                    }
+                }
+            }
+            return cropCount >= 3;
+        },
+        "Harvest 3 fully grown wheat crops"));
+
+        // Mining Tasks
+        availableTasks.add(new SimonTask("Deep Diver",
+                player -> player.getLocation().getY() < 0 &&
+                        player.getLocation().getBlock().getLightLevel() == 0,
+                "Reach bedrock level in complete darkness"));
+
+        // Survival Tasks
+        availableTasks.add(new SimonTask("Fire Walker",
+                player -> {
+                    Location loc = player.getLocation();
+                    return loc.getBlock().getType() == Material.MAGMA_BLOCK &&
+                            !player.hasPotionEffect(PotionEffectType.FIRE_RESISTANCE);
+                },
+                "Walk on magma blocks without fire resistance"));
+
+        // Enchanting Tasks
+        availableTasks.add(new SimonTask("Enchantment Master",
+                player -> {
+                    ItemStack item = player.getInventory().getItemInMainHand();
+                    return item != null && item.getEnchantments().size() >= 5;
+                },
+                "Hold an item with 5 or more enchantments"));
+
+        // Brewing Tasks
+        availableTasks.add(new SimonTask("Potion Mixer",
+                player -> {
+                    return player.getActivePotionEffects().size() >= 3;
+                },
+                "Have 3 potion effects active simultaneously"));
+
+        // Transportation Tasks
+        availableTasks.add(new SimonTask("Elytra Expert",
+                player -> {
+                    return player.isGliding() &&
+                            player.getVelocity().length() > 1.5 &&
+                            player.getLocation().getPitch() < -45;
+                },
+                "Perform a steep dive while gliding with elytra"));
+
+        // Combat Tricks
+        availableTasks.add(new SimonTask("Shield Master",
+                player -> {
+                    return player.isBlocking() &&
+                            player.getLocation().getPitch() < -60 &&
+                            player.isSneaking();
+                },
+                "Block while looking up and sneaking"));
+
+        // Resource Collection
+        availableTasks.add(new SimonTask("Resource Gatherer",
+                player -> {
+                    Inventory inv = player.getInventory();
+                    return inv.contains(Material.OAK_LOG, 16) &&
+                            inv.contains(Material.COBBLESTONE, 16) &&
+                            inv.contains(Material.IRON_ORE, 4);
+                },
+                "Collect 16 logs, 16 cobblestone, and 4 iron ore"));
+
+        // Navigation Tasks
+        availableTasks.add(new SimonTask("Explorer",
+                player -> {
+                    Location loc = player.getLocation();
+                    return Math.abs(loc.getX()) > 1000 || Math.abs(loc.getZ()) > 1000;
+                },
+                "Travel 1000 blocks from spawn in any direction"));
+
+        // Food Tasks
+        availableTasks.add(new SimonTask("Gourmet Chef",
+                player -> {
+                    return player.getFoodLevel() == 20 &&
+                            player.getSaturation() > 15;
+                },
+                "Achieve full hunger and saturation bars"));
+
+        // Advanced Building
+        availableTasks.add(new SimonTask("Scaffold Builder",
+                player -> {
+                    Location loc = player.getLocation();
+                    return loc.getY() > player.getWorld().getHighestBlockYAt(loc) + 20 &&
+                            loc.getBlock().getRelative(BlockFace.DOWN).getType().isSolid();
+                },
+                "Build and stand on a pillar 20 blocks above the highest point"));
+
+        // Weather Challenges
+        availableTasks.add(new SimonTask("Storm Chaser",
+                player -> {
+                    Location loc = player.getLocation();
+                    return loc.getWorld().hasStorm() &&
+                            loc.getBlock().getLightFromSky() == 15 &&
+                            player.getInventory().getHelmet() == null;
+                },
+                "Stand in an open area during a thunderstorm without armor"));
+
+        // Technical Tasks
+        availableTasks.add(new SimonTask("Wireless Engineer",
+                player -> {
+                    Location loc = player.getLocation();
+                    return loc.getBlock().getType() == Material.OBSERVER &&
+                            loc.getBlock().getRelative(BlockFace.UP).getType() == Material.REDSTONE_LAMP &&
+                            loc.getBlock().getRelative(BlockFace.UP).isBlockPowered();
+                },
+                "Create a wireless redstone signal using observers"));
+
+        availableTasks.add(new SimonTask("Sheep Rainbow",
+                player -> {
+                    return player.getNearbyEntities(10, 3, 10).stream()
+                            .filter(e -> e instanceof Sheep)
+                            .map(e -> (Sheep) e)
+                            .map(Sheep::getColor)
+                            .distinct()
+                            .count() >= 5;
+                },
+                "Gather 5 differently colored sheep in one area"));
+
+        // Advanced Combat
+        availableTasks.add(new SimonTask("Trident Master",
+                player -> {
+                    return player.isGliding() &&
+                            player.getInventory().getItemInMainHand().getType() == Material.TRIDENT &&
+                            player.getLocation().getBlock().isLiquid();
+                },
+                "Throw a trident while gliding over water"));
+
+        availableTasks.add(new SimonTask("TNT Jumper",
+                player -> {
+                    return !player.isOnGround() &&
+                            player.getNearbyEntities(3, 3, 3).stream()
+                                    .anyMatch(e -> e instanceof TNTPrimed);
+                },
+                "Jump using TNT explosion (without dying)"));
+
+        // Music & Sound
+        availableTasks.add(new SimonTask("Music Maker",
+                player -> {
+                    Location loc = player.getLocation();
+                    return loc.getBlock().getType() == Material.NOTE_BLOCK &&
+                            loc.getBlock().getBlockPower() > 0;
+                },
+                "Play a note block melody"));
+
+        // Advanced Building
+        availableTasks.add(new SimonTask("Pixel Artist",
+                player -> {
+                    Location loc = player.getLocation();
+                    Set<Material> colors = new HashSet<>();
+                    for (int x = -2; x <= 2; x++) {
+                        for (int y = 0; y <= 4; y++) {
+                            Material type = loc.clone().add(x, y, 0).getBlock().getType();
+                            if (type.name().contains("WOOL")) colors.add(type);
+                        }
+                    }
+                    return colors.size() >= 6;
+                },
+                "Create a wool pixel art using 6 different colors"));
+
+        // Ocean Tasks
+        availableTasks.add(new SimonTask("Coral Collector",
+                player -> {
+                    return Stream.of(Material.BRAIN_CORAL, Material.BUBBLE_CORAL,
+                                    Material.FIRE_CORAL, Material.HORN_CORAL,
+                                    Material.TUBE_CORAL)
+                            .allMatch(m -> player.getInventory().contains(m));
+                },
+                "Collect all 5 types of coral"));
+
+        // Nether Challenges
+        availableTasks.add(new SimonTask("Strider Racer",
+                player -> {
+                    return player.getVehicle() instanceof Strider &&
+                            player.getLocation().getBlock().getType() == Material.LAVA;
+                },
+                "Ride a Strider across a lava lake"));
+
+        // End Challenges
+        availableTasks.add(new SimonTask("Dragon Breath Collector",
+                player -> {
+                    return player.getInventory().contains(Material.DRAGON_BREATH) &&
+                            player.getLocation().getWorld().getEnvironment() == World.Environment.THE_END;
+                },
+                "Collect Dragon's Breath in The End"));
+
+        // Village Tasks
+        availableTasks.add(new SimonTask("Village Hero",
+                player -> {
+                    return player.getNearbyEntities(20, 10, 20).stream()
+                            .filter(e -> e instanceof Villager)
+                            .count() >= 5 &&
+                            player.getStatistic(Statistic.RAID_WIN) > 0;
+                },
+                "Win a raid while protecting at least 5 villagers"));
+
+        // Redstone Engineering
+        availableTasks.add(new SimonTask("Logic Master",
+                player -> {
+                    Location loc = player.getLocation();
+                    int comparators = 0;
+                    int repeaters = 0;
+                    for (int x = -3; x <= 3; x++) {
+                        for (int z = -3; z <= 3; z++) {
+                            Block block = loc.clone().add(x, 0, z).getBlock();
+                            if (block.getType() == Material.COMPARATOR) comparators++;
+                            if (block.getType() == Material.REPEATER) repeaters++;
+                        }
+                    }
+                    return comparators >= 2 && repeaters >= 2;
+                },
+                "Build a working logic circuit with comparators and repeaters"));
+
+        // Farming Advanced
+        availableTasks.add(new SimonTask("Bee Keeper",
+                player -> {
+                    return player.getNearbyEntities(10, 10, 10).stream()
+                            .filter(e -> e instanceof Bee)
+                            .count() >= 3 &&
+                            player.getLocation().getBlock().getType() == Material.BEEHIVE;
+                },
+                "Maintain a beehive with at least 3 bees"));
+
+        // Transportation Advanced
+        availableTasks.add(new SimonTask("Rail Engineer",
+                player -> {
+                    Location loc = player.getLocation();
+                    int railCount = 0;
+                    for (int x = -5; x <= 5; x++) {
+                        for (int z = -5; z <= 5; z++) {
+                            Block block = loc.clone().add(x, 0, z).getBlock();
+                            if (block.getType().name().contains("RAIL")) railCount++;
+                        }
+                    }
+                    return railCount >= 10 &&
+                            loc.getBlock().getType() == Material.POWERED_RAIL;
+                },
+                "Build a powered rail system with at least 10 tracks"));
+
+        // Potion Making
+        availableTasks.add(new SimonTask("Alchemist",
+                player -> {
+                    return player.getActivePotionEffects().stream()
+                            .filter(effect -> effect.getType().equals(PotionEffectType.INVISIBILITY))
+                            .findFirst()
+                            .map(effect -> effect.getAmplifier() >= 1)
+                            .orElse(false);
+                },
+                "Create and drink an Invisibility II potion"));
+
+        // Advanced Movement
+        availableTasks.add(new SimonTask("Parkour Master",
+                player -> {
+                    Location loc = player.getLocation();
+                    return !player.isOnGround() &&
+                            loc.getY() > loc.getWorld().getHighestBlockYAt(loc) + 10 &&
+                            player.getInventory().getBoots() != null &&
+                            player.getInventory().getBoots().getEnchantments().containsKey(Enchantment.FEATHER_FALLING);
+                },
+                "Perform a high jump with Feather Falling boots"));
+
+        // Advanced Combat
+        availableTasks.add(new SimonTask("Archery Challenge",
+                player -> {
+                    return player.getStatistic(Statistic.MOB_KILLS) >
+                            player.getStatistic(Statistic.MOB_KILLS, EntityType.SKELETON) &&
+                            player.getInventory().getItemInMainHand().getType() == Material.BOW;
+                },
+                "Defeat a Skeleton using only their own arrows"));
+
+        // Weather Mastery
+        availableTasks.add(new SimonTask("Lightning Hunter",
+                player -> {
+                    Location loc = player.getLocation();
+                    return loc.getWorld().hasStorm() &&
+                            loc.getWorld().getHighestBlockYAt(loc) == loc.getBlockY() &&
+                            player.getInventory().getHelmet() != null &&
+                            player.getInventory().getHelmet().getEnchantments().containsKey(Enchantment.PROTECTION);
+                },
+                "Stand at the highest point during a thunderstorm with Protection armor"));
+
+        // Food and Farming
+        availableTasks.add(new SimonTask("Master Chef",
+                player -> {
+                    return player.getInventory().contains(Material.GOLDEN_CARROT) &&
+                            player.getInventory().contains(Material.GOLDEN_APPLE) &&
+                            player.getFoodLevel() == 20;
+                },
+                "Create golden food items and maintain full hunger"));
+
+        // Advanced Building
+        availableTasks.add(new SimonTask("Statue Maker",
+                player -> {
+                    Location loc = player.getLocation();
+                    int height = 0;
+                    Material baseMaterial = loc.getBlock().getType();
+                    while (height < 10 &&
+                            loc.clone().add(0, height, 0).getBlock().getType() == baseMaterial) {
+                        height++;
+                    }
+                    return height >= 5 && baseMaterial.isSolid();
+                },
+                "Build a statue at least 5 blocks tall"));
+
+        // Enchanting Mastery
+        availableTasks.add(new SimonTask("Enchanted Warriors",
+                player -> {
+                    ItemStack[] armor = player.getInventory().getArmorContents();
+                    return Arrays.stream(armor)
+                            .filter(Objects::nonNull)
+                            .allMatch(item -> !item.getEnchantments().isEmpty());
+                },
+                "Wear a full set of enchanted armor"));
+
+        // Advanced Redstone
+        availableTasks.add(new SimonTask("Hidden Door",
+                player -> {
+                    Location loc = player.getLocation();
+                    return loc.getBlock().getType() == Material.PISTON &&
+                            loc.getBlock().getBlockPower() > 0 &&
+                            loc.clone().add(0, 1, 0).getBlock().getType().isOccluding();
+                },
+                "Create a hidden piston door"));
+    }
 
     private String getRandomPrefix() {
         return COMMAND_PREFIXES[new Random().nextInt(COMMAND_PREFIXES.length)];
