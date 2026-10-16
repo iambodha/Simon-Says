@@ -1,52 +1,51 @@
-# Simon Says: The Ultimate Minecraft Minigame
+# Simon Says
 
-> **Simon says:** Have fun, stay alert, and get ready to compete!
+A Java plugin for Minecraft servers: randomized Simon Says challenges play out inside a shrinking circular particle border. Players have 15 seconds to follow a real instruction or ignore a fake one, while the safe area closes over six phases.
 
-Welcome to **Simon Says**, the fast-paced Minecraft minigame that will keep you on your toes! This mod takes the classic Simon Says game you know and love and adds exciting Minecraft twists, including shrinking borders, randomized tasks, and a unique particle border that adapts to your position.
+![Particle border during a game](https://cdn.modrinth.com/data/cached_images/0394f6cd97188b8b7b39951b01a666c94c5938b2.png)
 
-The goal is simple: follow instructions *only if Simon says*! Watch out, though—there are plenty of tricks designed to trip you up. *Miss a beat, and you might find yourself out of the game!*
+## Build and install
 
-![Custom Particle Border](https://cdn.modrinth.com/data/cached_images/0394f6cd97188b8b7b39951b01a666c94c5938b2.png)
+Requires **Java 21**, **Maven 3.9+**, and a **Spigot-compatible Minecraft 1.21.1** server. The plugin compiles against Spigot API `1.21.1-R0.1-SNAPSHOT`; other server versions need a playtest.
 
-## 🌟 Features
+```sh
+mvn --batch-mode verify
+```
 
-> **Simon says:** Pay attention to these fun features!
+Copy `target/simon-1.0.0-SNAPSHOT.jar` to your server's `plugins/` directory, then restart the server. CI also builds a `simon-plugin` artifact on pushes and pull requests. Use the JAR whose filename starts with `simon-`, rather than the `original-` JAR produced during shading.
 
-1. **Multiple Tasks:** Test your skills with an ever-changing lineup of tasks meant to keep you guessing. Keep an eye on the instructions, but don’t act unless *Simon says*!
-2. **Shrinking Border:** Feel the pressure as the play area slowly closes in around you. Stay in the game or get squeezed out!
-3. **Custom Particle Border:** A dynamic border of particles surrounds you, enhancing the visual experience while staying optimized around your character’s radius.
-4. **Open Source & Modifiable:** This is just the beginning! This mod can be used as a base for more exciting add-ons. Want to make it wilder? Dive into the code and make it yours!
+## Run a game
 
-![How Tasks Show Up](https://cdn.modrinth.com/data/cached_images/a26868dd8aea36b1477f89c470015627e2eaeb7a.png)
+| Command | Behavior |
+| --- | --- |
+| `/startgame` | Start or restart one server-wide game session, centered on you in your current world |
+| `/stopgame` | Stop the session, cancel pending challenges, and restore the world's previous border size |
+| `/endgame` | Alias for `/stopgame` |
 
-## 🚀 Getting Started
+Commands require `simon.admin`, granted to operators by default. There is no duration argument. The participant list is captured from players in the starting world; late joiners and players in other worlds do not receive challenges. Existing participants can rejoin and resume the current task. Border damage applies to players in the game world, so use a dedicated game world.
 
-> **Simon says:** Follow these commands to play!
+- A prompt beginning **“Simon says”** is real: perform the action within 15 seconds.
+- Other prompts are fake: avoid that action until time expires.
+- A task resolves once per player. Failure applies random negative potion effects; success can grant a short speed effect. This is a survival minigame, without automatic elimination or winner detection.
+- Challenges start once per minute, from 60 through 1,020 seconds. The border uses six fixed wait/shrink phases. At the final zone, border damage continues until an administrator stops the game.
 
-1. **Start the Game:** Use `/startgame` to begin. Keep an eye out for Simon's instructions, and remember—only act if *Simon says*!
-2. **End the Game:** To end your session, simply enter `/endgame`. Perfect for wrapping up the chaos when you're ready.
+![Challenge display](https://cdn.modrinth.com/data/cached_images/a26868dd8aea36b1477f89c470015627e2eaeb7a.png)
 
-## 🎮 How to Play
+## Engineering
 
-> **Simon says:** Follow the rules closely!
+| Component | Responsibility |
+| --- | --- |
+| `Game_Setup` | Border phases, particles, outside-zone damage, timer, and world-border restoration |
+| `TaskManager` | Challenge catalog, participant scope, scheduling, boss bars, rewards, and penalties |
+| `TaskOutcome` | One-time success/failure decisions, independently unit tested |
+| `GameCommands` | Administrative commands and permissions |
 
-- **When Simon Says:** Complete the task!
-- **When Simon *doesn’t* say:** Do *nothing*—or face elimination!
+Stopping, restarting, and disabling cancel all pending task launches. The border decreases at the configured per-second rate. Particle emission uses the configured 100 points × 16 height sections at two updates per second, rather than growing with circumference and multiplying each point by height. Prompts now agree with the rule being evaluated; contradictory mid-task prompts are disabled because they did not have matching evaluation logic.
 
-Think you can handle it? The shrinking border means you’re always on the move, but the tasks add an extra layer of complexity. Outlast your friends to win!
+## Validation and remaining work
 
-## 📂 Contributing
+`mvn verify` compiles the plugin, runs the outcome/timing regression tests, and packages the JAR. These tests cover the response window, fake-task behavior, single resolution, and border shrink duration. They do not replace a multiplayer server playtest.
 
-> **Simon says:** Want to make it better?
+Before using a build with a group, playtest start → challenge → stop → wait past the next scheduled challenge; restart twice; join/rejoin mid-task; and check a second world. Confirm particle performance with the intended player count. Some catalog challenges depend on specific biomes, mobs, or structures and may not be achievable in every arena. Rewards and penalties last for their configured potion durations after stopping.
 
-Feel free to fork, modify, or add new features to the Simon Says mod! We welcome contributions from the community. Check out the repository on GitHub for the latest updates and to join in the development:
-
-[**Simon Says GitHub Repository**](https://github.com/iambodha/Simon-Says)
-
-## 📝 License
-
-This mod is open source under the [Apache License](LICENSE), so you’re free to use, share, and build upon it.
-
----
-
-> **Simon says:** Have fun, stay sharp, and may the best player win!
+[Apache License 2.0](LICENSE).

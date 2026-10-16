@@ -26,6 +26,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -48,40 +49,32 @@ public class TaskManager {
     private final Simon plugin;
     private final List<SimonTask> availableTasks;
     private SimonTask currentTask;
-    private SimonTask contradictoryTask;
+    private World gameWorld;
+    private final Set<UUID> participants = new HashSet<>();
+    private final List<BukkitTask> scheduledTasks = new ArrayList<>();
     private final Map<UUID, TaskProgress> playerProgress;
     private BukkitRunnable taskTimer;
     private BossBar taskBar;
     private boolean isSimonSaysTask;
-    private boolean hasContradictoryCommand;
+
 
     private static final long[] TASK_TIMINGS = {60, 120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720, 780, 840, 900, 960, 1020}; // Task timing intervals
     private static final long TASK_DURATION = 15; // Reduced to 15 seconds for faster gameplay
 
     private static class TaskProgress {
-        boolean completed;
+        final TaskOutcome outcome = new TaskOutcome();
         Set<String> completedSubtasks;
 
         TaskProgress() {
-            this.completed = false;
+
             this.completedSubtasks = new HashSet<>();
         }
     }
 
     // Enhanced command prefixes for more variety
     private static final String[] COMMAND_PREFIXES = {
-            "Simon says",
-            "Simon demands",
-            "Simon requests",
-            "The mighty Simon commands",
-            "Simon whispers",
-            "Simon suggests",
-            "Please",
-            "You must",
-            "Everyone should",
-            "Quickly",
-            "The game master says",
-            "Listen carefully and"
+            "Please", "You must", "Everyone should", "Quickly",
+            "The game master says", "Listen carefully and"
     };
 
     // Dynamic task adjectives for more engaging descriptions
@@ -687,6 +680,7 @@ public class TaskManager {
     }
 
     private String getRandomPrefix() {
+        if (isSimonSaysTask) return "Simon says";
         return COMMAND_PREFIXES[new Random().nextInt(COMMAND_PREFIXES.length)];
     }
 
@@ -705,7 +699,7 @@ public class TaskManager {
                 task.toLowerCase());
 
         // Send message to all players
-        for (Player player : Bukkit.getOnlinePlayers()) {
+        for (Player player : getPlayers()) {
             // Title display
             player.sendTitle(
                     prefixColor + prefix + "!",
@@ -741,7 +735,7 @@ public class TaskManager {
                 BarStyle.SEGMENTED_20
         );
 
-        for (Player player : Bukkit.getOnlinePlayers()) {
+        for (Player player : getPlayers()) {
             taskBar.addPlayer(player);
         }
         taskBar.setVisible(true);
@@ -750,7 +744,17 @@ public class TaskManager {
         broadcastTaskMessage(prefix, taskDescription, isSimonSays);
     }
 
-    public void startTasks() {
+    private List<Player> getPlayers() {
+        if (gameWorld == null) return Collections.emptyList();
+        return gameWorld.getPlayers().stream()
+                .filter(player -> participants.contains(player.getUniqueId()))
+                .toList();
+    }
+
+    public void startTasks(World world) {
+        cleanup();
+        gameWorld = world;
+        for (Player player : world.getPlayers()) participants.add(player.getUniqueId());
         Collections.shuffle(availableTasks);
         scheduleAllTasks();
     }
@@ -758,14 +762,14 @@ public class TaskManager {
     private void scheduleAllTasks() {
         for (int i = 0; i < TASK_TIMINGS.length; i++) {
             final int taskIndex = i;
-            new BukkitRunnable() {
+            scheduledTasks.add(new BukkitRunnable() {
                 @Override
                 public void run() {
                     if (taskIndex < availableTasks.size()) {
                         startNewTask(availableTasks.get(taskIndex));
                     }
                 }
-            }.runTaskLater(plugin, TASK_TIMINGS[taskIndex] * 20L);
+            }.runTaskLater(plugin, TASK_TIMINGS[taskIndex] * 20L));
         }
     }
 
@@ -776,20 +780,10 @@ public class TaskManager {
         // 60% chance of being a real Simon Says command
         isSimonSaysTask = new Random().nextDouble() < 0.6;
 
-        // 30% chance of adding a contradictory command
-        hasContradictoryCommand = new Random().nextDouble() < 0.3;
-
-        if (hasContradictoryCommand) {
-            // Select a different task as the contradictory one
-            List<SimonTask> otherTasks = new ArrayList<>(availableTasks);
-            otherTasks.remove(task);
-            contradictoryTask = otherTasks.get(new Random().nextInt(otherTasks.size()));
-        }
-
         createBossBar(task.getDescription(), isSimonSaysTask);
 
         // Initialize progress tracking for all players
-        for (Player player : Bukkit.getOnlinePlayers()) {
+        for (Player player : getPlayers()) {
             playerProgress.put(player.getUniqueId(), new TaskProgress());
         }
 
@@ -803,7 +797,7 @@ public class TaskManager {
 
         taskTimer = new BukkitRunnable() {
             private int timeLeft = (int) TASK_DURATION;
-            private boolean contradictoryCommandIssued = false;
+
 
             @Override
             public void run() {
@@ -813,19 +807,12 @@ public class TaskManager {
                     return;
                 }
 
-                // Issue contradictory command halfway through
-                if (hasContradictoryCommand && !contradictoryCommandIssued && timeLeft == TASK_DURATION/2) {
-                    contradictoryCommandIssued = true;
-                    String prefix = isSimonSaysTask ? "Simon says" : getRandomPrefix();
-                    broadcastTaskMessage(prefix, contradictoryTask.getDescription(), !isSimonSaysTask);
-                }
-
                 double progress = (double) timeLeft / TASK_DURATION;
                 taskBar.setProgress(progress);
 
                 if (timeLeft <= 5) {
                     taskBar.setColor(BarColor.RED);
-                    for (Player player : Bukkit.getOnlinePlayers()) {
+                    for (Player player : getPlayers()) {
                         player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 0.5f, 1.0f);
                     }
                 }
@@ -840,22 +827,16 @@ public class TaskManager {
 
     private void checkTaskCompletion() {
         if (currentTask == null) return;
+        for (Player player : getPlayers()) resolvePlayer(player, false);
+    }
 
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            UUID playerId = player.getUniqueId();
-            TaskProgress progress = playerProgress.get(playerId);
-
-            if (!progress.completed) {
-                boolean hasCompletedTask = currentTask.isCompleted(player);
-
-                if ((hasCompletedTask && !isSimonSaysTask) || (!hasCompletedTask && isSimonSaysTask)) {
-                    failPlayer(player);
-                    progress.completed = true;
-                } else if (hasCompletedTask && isSimonSaysTask) {
-                    progress.completed = true;
-                    playSuccessEffect(player);
-                }
-            }
+    private void resolvePlayer(Player player, boolean deadlineReached) {
+        TaskProgress progress = playerProgress.computeIfAbsent(player.getUniqueId(), id -> new TaskProgress());
+        if (progress.outcome.isResolved()) return;
+        Boolean success = progress.outcome.observe(currentTask.isCompleted(player), isSimonSaysTask, deadlineReached);
+        if (success != null) {
+            if (success) playSuccessEffect(player);
+            else failPlayer(player);
         }
     }
 
@@ -925,30 +906,10 @@ public class TaskManager {
     private void endCurrentTask() {
         if (currentTask == null) return;
 
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            UUID playerId = player.getUniqueId();
-            TaskProgress progress = playerProgress.get(playerId);
-
-            // Check if the player completed the task correctly
-            boolean hasCompletedTask = currentTask.isCompleted(player);
-
-            // If the task was a Simon Says task and the player completed it correctly
-            if (hasCompletedTask && isSimonSaysTask) {
-                progress.completed = true;
-                playSuccessEffect(player); // Play success effects and provide rewards
-            }
-            // If the task was not a Simon Says task and the player completed it
-            else if (!hasCompletedTask && !isSimonSaysTask) {
-                progress.completed = true;
-                playSuccessEffect(player); // Success, as the player should not complete the task
-            } else {
-                // The player failed, play fail effects and handle punishment
-                failPlayer(player);
-            }
-        }
+        for (Player player : getPlayers()) resolvePlayer(player, true);
 
         // Announce task end
-        for (Player player : Bukkit.getOnlinePlayers()) {
+        for (Player player : getPlayers()) {
             player.sendMessage(ChatColor.GOLD + "➤ " + ChatColor.GRAY + "Time's up! Next task coming soon...");
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.5f, 0.5f);
         }
@@ -960,13 +921,18 @@ public class TaskManager {
             taskBar = null;
         }
         currentTask = null;
-        contradictoryTask = null;
-        hasContradictoryCommand = false;
+
+
     }
 
     public void cleanup() {
+        for (BukkitTask scheduled : scheduledTasks) scheduled.cancel();
+        scheduledTasks.clear();
+        participants.clear();
+        gameWorld = null;
         if (taskTimer != null) {
             taskTimer.cancel();
+            taskTimer = null;
         }
         if (taskBar != null) {
             taskBar.removeAll();
