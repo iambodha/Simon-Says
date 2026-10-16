@@ -22,14 +22,19 @@ public class GameCommands implements CommandExecutor {
         }
 
         Player player = (Player) sender;
-        if (!player.isOp()) {
+        if (!player.hasPermission("simon.admin")) {
             player.sendMessage("§cYou don't have permission to use this command!");
+            return true;
+        }
+
+        if (args.length != 0) {
+            player.sendMessage("§cUsage: /" + command.getName());
             return true;
         }
 
         if (command.getName().equalsIgnoreCase("startgame")) {
             gameSetup.startGame(player.getWorld(), player.getLocation());
-            taskManager.startTasks();
+            taskManager.startTasks(player.getWorld());
             player.sendMessage("§aStarting game with Simon Says tasks!");
             return true;
         }

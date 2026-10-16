@@ -17,6 +17,7 @@ public class Game_Setup {
     private BukkitTask timerTask;
     private Location centerLocation;
     private World gameWorld;
+    private double previousWorldBorderSize;
     private boolean isGameRunning = false;
     private int timeRemaining; // in seconds
     private double currentBorderRadius;
@@ -57,7 +58,7 @@ public class Game_Setup {
             private int particlesPerCircle = 100;
             private double damageAmount = 2.0;
             private int wallSections = 16;
-            private long borderUpdateTicks = 2L;
+            private long borderUpdateTicks = 10L;
             private long damageCheckTicks = 10L;
             private Color borderColor = Color.RED;
 
@@ -164,14 +165,18 @@ public class Game_Setup {
     private void updateBorderSize() {
         if (!isCurrentlyShrinking) return;
 
-        // Move at constant speed (adjusted for tick rate)
-        double moveAmount = shrinkSpeedPerSecond / 20; // Convert per-second speed to per-tick speed
-        currentBorderRadius = Math.max(targetBorderRadius, currentBorderRadius - moveAmount);
+        // This method is called once per second by the game timer.
+        currentBorderRadius = advanceRadius(currentBorderRadius, targetBorderRadius, shrinkSpeedPerSecond);
+    }
+
+    static double advanceRadius(double current, double target, double speedPerSecond) {
+        return Math.max(target, current - speedPerSecond);
     }
 
     private void initialize(World world, Location center) {
+        this.previousWorldBorderSize = world.getWorldBorder().getSize();
         this.gameWorld = world;
-        this.centerLocation = center;
+        this.centerLocation = center.clone();
         this.currentBorderRadius = config.borderDiameter / 2.0;
 
         resetWorldBorder();
@@ -245,24 +250,16 @@ public class Game_Setup {
                     }
                 }
             }
-        }.runTaskTimer(plugin, 0L, 20L); // Run every second
+        }.runTaskTimer(plugin, 20L, 20L); // Run every second
     }
 
     private void drawParticleBorder() {
         if (!showParticles) return;
 
-        int maxHeight = gameWorld.getMaxHeight();
-
-        // Calculate the circumference of the current circle
-        double circumference = 2 * Math.PI * currentBorderRadius;
-
-        // Adjust number of particles based on circumference
-        // Using a ratio of 1 particle per block of circumference
-        int adjustedParticleCount = (int) Math.max(50, Math.ceil(circumference));
-
-        // Calculate height sections based on circumference
-        int adjustedWallSections = (int) Math.max(8, Math.ceil(circumference / 20));
-        int heightPerSection = maxHeight / adjustedWallSections;
+        int minHeight = gameWorld.getMinHeight();
+        int adjustedParticleCount = config.particlesPerCircle;
+        int adjustedWallSections = config.wallSections;
+        double heightPerSection = (gameWorld.getMaxHeight() - minHeight) / (double) adjustedWallSections;
 
         for (int i = 0; i < adjustedParticleCount; i++) {
             double angle = 2 * Math.PI * i / adjustedParticleCount;
@@ -270,18 +267,18 @@ public class Game_Setup {
             double z = centerLocation.getZ() + (currentBorderRadius * Math.sin(angle));
 
             for (int h = 0; h < adjustedWallSections; h++) {
-                Location particleLoc = new Location(gameWorld, x, h * heightPerSection, z);
-                spawnBorderParticle(particleLoc, heightPerSection);
+                Location particleLoc = new Location(gameWorld, x, minHeight + h * heightPerSection, z);
+                spawnBorderParticle(particleLoc);
             }
         }
     }
 
-    private void spawnBorderParticle(Location location, int height) {
+    private void spawnBorderParticle(Location location) {
         gameWorld.spawnParticle(
                 Particle.DUST_COLOR_TRANSITION,
                 location,
-                height,
-                0, height, 0,
+                1,
+                0, 0, 0,
                 new Particle.DustTransition(config.borderColor, config.borderColor, 1.0f)
         );
     }
@@ -354,7 +351,8 @@ public class Game_Setup {
             timerTask.cancel();
         }
         if (gameWorld != null) {
-            gameWorld.getWorldBorder().setSize(60000000);
+            gameWorld.getWorldBorder().setSize(previousWorldBorderSize);
+            gameWorld = null;
         }
         showParticles = false;
         isGameRunning = false;
